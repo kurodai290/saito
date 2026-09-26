@@ -5,25 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>マイ・ToDoリスト</title>
     <style>
-        /* --- 表向き（カモフラージュ）のスタイル --- */
         body { font-family: sans-serif; background: #f4f4f9; color: #333; padding: 20px; display: flex; justify-content: center; }
         .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
         h1 { font-size: 24px; margin-bottom: 20px; color: #4a5568; }
         ul { list-style: none; padding: 0; }
         li { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
         
-        /* --- 半沢直樹風：隠しクラウドのスタイル（初期状態は非表示） --- */
+        /* 隠しクラウドのスタイル */
         #secret-cloud {
             display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: #0d1117; color: #00ff66; font-family: 'Courier New', Courier, monospace;
-            padding: 40px; box-sizing: border-box; z-index: 9999;
+            padding: 20px; box-sizing: border-box; z-index: 9999; overflow-y: auto;
         }
-        .cloud-box { max-width: 600px; margin: 0 auto; }
+        .cloud-box { max-width: 500px; margin: 0 auto; }
         input[type="password"], input[type="text"] {
             background: #161b22; border: 1px solid #00ff66; color: #00ff66;
             padding: 10px; width: 100%; margin-bottom: 15px; box-sizing: border-box;
         }
         button { background: #00ff66; color: #000; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; }
+        .file-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #224422; }
+        .file-link { color: #00ff66; text-decoration: none; cursor: pointer; }
+        .file-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -39,42 +41,39 @@
         </ul>
     </div>
 
-    <!-- 2. 裏の隠しクラウド画面（半沢直樹風） -->
+    <!-- 2. 裏の隠しクラウド画面 -->
     <div id="secret-cloud">
         <div class="cloud-box">
             <h2>🔒 CENTRAL SECURITY CLOUD V3.02</h2>
             <hr style="border-color: #00ff66;">
-            <p>TermuxのトンネルURLを入力してください：</p>
-            <input type="text" id="tunnel-url" placeholder="https://xxxx.trycloudflare.com">
-            <p>アクセスキーを入力してください：</p>
+            <input type="text" id="tunnel-url" placeholder="https://trycloudflare.com">
             <input type="password" id="secret-key" placeholder="ENTER ACCESS KEY...">
             <button onclick="connectToTermux()">CONNECT</button>
             
-            <div id="cloud-output" style="margin-top: 30px;"></div>
+            <!-- アップロード機能（接続後に表示） -->
+            <div id="upload-zone" style="display:none; margin-top:20px; padding:15px; border:1px dashed #00ff66;">
+                <h4>📤 新しいファイルを隠す</h4>
+                <input type="file" id="file-input" style="color:#00ff66;"><br><br>
+                <button onclick="uploadFile()">UPLOAD</button>
+            </div>
+
+            <div id="cloud-output" style="margin-top: 20px;"></div>
         </div>
     </div>
 
     <script>
-        // --- 🔑 裏コマンドの仕掛け ---
         let inputBuffer = "";
-        const secretCommand = "kurodai"; // パソコン：これで隠し画面が開く
+        const secretCommand = "kurodai";
 
-        // 仕掛けA：パソコンで「kurodai」とタイピング
         window.addEventListener("keydown", (e) => {
             inputBuffer += e.key.toLowerCase();
-            if (inputBuffer.includes(secretCommand)) {
-                openSecretCloud();
-                inputBuffer = "";
-            }
+            if (inputBuffer.includes(secretCommand)) { openSecretCloud(); inputBuffer = ""; }
             if (inputBuffer.length > 20) inputBuffer = inputBuffer.substring(1);
         });
 
-        // 仕掛けB：スマホで「今日のタスク」の文字を3秒間長押し
         const trigger = document.getElementById("trigger-zone");
         let pressTimer;
-        trigger.addEventListener("touchstart", () => {
-            pressTimer = setTimeout(openSecretCloud, 3000); // 3秒
-        });
+        trigger.addEventListener("touchstart", () => { pressTimer = setTimeout(openSecretCloud, 3000); });
         trigger.addEventListener("touchend", () => clearTimeout(pressTimer));
 
         function openSecretCloud() {
@@ -83,49 +82,84 @@
             document.body.style.background = "#0d1117";
         }
 
-        // --- 📡 認証付きTermuxサーバーとの通信（アップデート版） ---
-        function connectToTermux() {
+        // サーバーURLとキーを取得する共通関数
+        function getTargetUrl() {
             const url = document.getElementById("tunnel-url").value;
+            return url.endsWith('/') ? url : `${url}/`;
+        }
+
+        // 1. 接続＆一覧表示
+        function connectToTermux() {
             const secretKey = document.getElementById("secret-key").value;
             const output = document.getElementById("cloud-output");
+            if(!secretKey) { alert("キーを入力してください"); return; }
             
-            if(!url) { alert("URLを入力してください"); return; }
-            if(!secretKey) { alert("アクセスキーを入力してください"); return; }
-            
-            output.innerHTML = "認証中...";
+            output.innerHTML = "読込中...";
 
-            // 末尾のシャッシュを調整してAPIエンドポイントを指定
-            const apiUrl = url.endsWith('/') ? `${url}api/files` : `${url}/api/files`;
-
-            // パスワードを暗号風に「Authorizationヘッダー」に入れてTermuxに安全に送る
-            fetch(apiUrl, {
-                method: "GET",
-                headers: {
-                    "Authorization": `Bearer ${secretKey}`
-                }
+            fetch(`${getTargetUrl()}api/files`, {
+                headers: { "Authorization": `Bearer ${secretKey}` }
             })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error("アクセス拒否、またはサーバーエラー");
-                }
-                return response.json();
-            })
+            .then(res => { if(!res.ok) throw new Error(); return res.json(); })
             .then(data => {
+                document.getElementById("upload-zone").style.display = "block"; // アップロード欄を表示
                 if (data.files && data.files.length > 0) {
-                    let fileListHtml = "<h3>📂 隠しストレージ内のファイル:</h3><ul>";
+                    let html = "<h3>📂 隠しファイル一覧:</h3>";
                     data.files.forEach(file => {
-                        fileListHtml += `<li style="color:#00ff66; border-bottom:1px solid #222;">📄 ${file}</li>`;
+                        html += `
+                        <div class="file-item">
+                            <span>📄 ${file}</span>
+                            <button onclick="downloadFile('${file}')" style="padding:2px 10px; font-size:12px;">DOWNLOAD</button>
+                        </div>`;
                     });
-                    fileListHtml += "</ul>";
-                    output.innerHTML = fileListHtml;
+                    output.innerHTML = html;
                 } else {
-                    output.innerHTML = "<h3>📂 隠しストレージ:</h3><p>ファイルはありません（空っぽです）</p>";
+                    output.innerHTML = "<p>ファイルはありません。</p>";
                 }
             })
-            .catch(err => {
-                output.innerHTML = "<span style='color:red;'>❌ 接続失敗。アクセスキーが違うか、Termuxが起動していません。</span>";
-                console.error(err);
+            .catch(() => { output.innerHTML = "<span style='color:red;'>❌ 認証失敗</span>"; });
+        }
+
+        // 2. ダウンロード処理
+        function downloadFile(filename) {
+            const secretKey = document.getElementById("secret-key").value;
+            
+            fetch(`${getTargetUrl()}api/download/${encodeURIComponent(filename)}`, {
+                headers: { "Authorization": `Bearer ${secretKey}` }
+            })
+            .then(res => res.blob())
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
             });
+        }
+
+        // 3. アップロード処理
+        function uploadFile() {
+            const secretKey = document.getElementById("secret-key").value;
+            const fileInput = document.getElementById("file-input");
+            if(fileInput.files.length === 0) { alert("ファイルを選んでください"); return; }
+
+            const formData = new FormData();
+            formData.append("cloudFile", fileInput.files[0]);
+
+            fetch(`${getTargetUrl()}api/upload`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${secretKey}` },
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    alert("アップロード完了！");
+                    connectToTermux(); // 一覧を再更新
+                }
+            })
+            .catch(() => alert("アップロードに失敗しました"));
         }
     </script>
 </body>
