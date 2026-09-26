@@ -45,7 +45,7 @@
             <h2>🔒 CENTRAL SECURITY CLOUD V3.02</h2>
             <hr style="border-color: #00ff66;">
             <p>TermuxのトンネルURLを入力してください：</p>
-            <input type="text" id="tunnel-url" placeholder="https://trycloudflare.com">
+            <input type="text" id="tunnel-url" placeholder="https://xxxx.trycloudflare.com">
             <p>アクセスキーを入力してください：</p>
             <input type="password" id="secret-key" placeholder="ENTER ACCESS KEY...">
             <button onclick="connectToTermux()">CONNECT</button>
@@ -83,23 +83,47 @@
             document.body.style.background = "#0d1117";
         }
 
-        // --- 📡 Termuxサーバーとの通信 ---
+        // --- 📡 認証付きTermuxサーバーとの通信（アップデート版） ---
         function connectToTermux() {
             const url = document.getElementById("tunnel-url").value;
+            const secretKey = document.getElementById("secret-key").value;
             const output = document.getElementById("cloud-output");
             
             if(!url) { alert("URLを入力してください"); return; }
+            if(!secretKey) { alert("アクセスキーを入力してください"); return; }
             
-            output.innerHTML = "接続中...";
+            output.innerHTML = "認証中...";
 
-            // TermuxのPythonサーバー（http.server）にファイル一覧を要求
-            fetch(url)
-            .then(response => response.text())
+            // 末尾のシャッシュを調整してAPIエンドポイントを指定
+            const apiUrl = url.endsWith('/') ? `${url}api/files` : `${url}/api/files`;
+
+            // パスワードを暗号風に「Authorizationヘッダー」に入れてTermuxに安全に送る
+            fetch(apiUrl, {
+                method: "GET",
+                headers: {
+                    "Authorization": `Bearer ${secretKey}`
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("アクセス拒否、またはサーバーエラー");
+                }
+                return response.json();
+            })
             .then(data => {
-                output.innerHTML = "<h3>📂 サーバー内のファイル一覧:</h3>" + data;
+                if (data.files && data.files.length > 0) {
+                    let fileListHtml = "<h3>📂 隠しストレージ内のファイル:</h3><ul>";
+                    data.files.forEach(file => {
+                        fileListHtml += `<li style="color:#00ff66; border-bottom:1px solid #222;">📄 ${file}</li>`;
+                    });
+                    fileListHtml += "</ul>";
+                    output.innerHTML = fileListHtml;
+                } else {
+                    output.innerHTML = "<h3>📂 隠しストレージ:</h3><p>ファイルはありません（空っぽです）</p>";
+                }
             })
             .catch(err => {
-                output.innerHTML = "<span style='color:red;'>接続失敗。Termuxの起動状態やURLを確認してください。</span>";
+                output.innerHTML = "<span style='color:red;'>❌ 接続失敗。アクセスキーが違うか、Termuxが起動していません。</span>";
                 console.error(err);
             });
         }
