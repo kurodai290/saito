@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マイ・ToDoリスト</title>
+    <style>
+        /* --- 表向き（カモフラージュ）のスタイル --- */
+        body { font-family: sans-serif; background: #f4f4f9; color: #333; padding: 20px; display: flex; justify-content: center; }
+        .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        h1 { font-size: 24px; margin-bottom: 20px; color: #4a5568; }
+        ul { list-style: none; padding: 0; }
+        li { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
+        
+        /* --- 半沢直樹風：隠しクラウドのスタイル（初期状態は非表示） --- */
+        #secret-cloud {
+            display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #0d1117; color: #00ff66; font-family: 'Courier New', Courier, monospace;
+            padding: 40px; box-sizing: border-box; z-index: 9999;
+        }
+        .cloud-box { max-width: 600px; margin: 0 auto; }
+        input[type="password"], input[type="text"] {
+            background: #161b22; border: 1px solid #00ff66; color: #00ff66;
+            padding: 10px; width: 100%; margin-bottom: 15px; box-sizing: border-box;
+        }
+        button { background: #00ff66; color: #000; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <!-- 1. 表向きのカモフラージュ画面 -->
+    <div class="container" id="app-surface">
+        <h1 id="trigger-zone">📝 今日のタスク</h1>
+        <p style="font-size: 12px; color: #999;">※スマホ：タイトルを3秒長押しで...</p>
+        <ul>
+            <li>修学旅行写真</li>
+            <li>部活</li>
+            <li>その他</li>
+        </ul>
+    </div>
+
+    <!-- 2. 裏の隠しクラウド画面（半沢直樹風） -->
+    <div id="secret-cloud">
+        <div class="cloud-box">
+            <h2>🔒 CENTRAL SECURITY CLOUD V3.02</h2>
+            <hr style="border-color: #00ff66;">
+            <p>TermuxのトンネルURLを入力してください：</p>
+            <input type="text" id="tunnel-url" placeholder="https://trycloudflare.com">
+            <p>アクセスキーを入力してください：</p>
+            <input type="password" id="secret-key" placeholder="ENTER ACCESS KEY...">
+            <button onclick="connectToTermux()">CONNECT</button>
+            
+            <div id="cloud-output" style="margin-top: 30px;"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- 🔑 裏コマンドの仕掛け ---
+        let inputBuffer = "";
+        const secretCommand = "kurodai"; // パソコン：これで隠し画面が開く
+
+        // 仕掛けA：パソコンで「kurodai」とタイピング
+        window.addEventListener("keydown", (e) => {
+            inputBuffer += e.key.toLowerCase();
+            if (inputBuffer.includes(secretCommand)) {
+                openSecretCloud();
+                inputBuffer = "";
+            }
+            if (inputBuffer.length > 20) inputBuffer = inputBuffer.substring(1);
+        });
+
+        // 仕掛けB：スマホで「今日のタスク」の文字を3秒間長押し
+        const trigger = document.getElementById("trigger-zone");
+        let pressTimer;
+        trigger.addEventListener("touchstart", () => {
+            pressTimer = setTimeout(openSecretCloud, 3000); // 3秒
+        });
+        trigger.addEventListener("touchend", () => clearTimeout(pressTimer));
+
+        function openSecretCloud() {
+            document.getElementById("app-surface").style.display = "none";
+            document.getElementById("secret-cloud").style.display = "block";
+            document.body.style.background = "#0d1117";
+        }
+
+        // --- 📡 Termuxサーバーとの通信 ---
+        function connectToTermux() {
+            const url = document.getElementById("tunnel-url").value;
+            const output = document.getElementById("cloud-output");
+            
+            if(!url) { alert("URLを入力してください"); return; }
+            
+            output.innerHTML = "接続中...";
+
+            // TermuxのPythonサーバー（http.server）にファイル一覧を要求
+            fetch(url)
+            .then(response => response.text())
+            .then(data => {
+                output.innerHTML = "<h3>📂 サーバー内のファイル一覧:</h3>" + data;
+            })
+            .catch(err => {
+                output.innerHTML = "<span style='color:red;'>接続失敗。Termuxの起動状態やURLを確認してください。</span>";
+                console.error(err);
+            });
+        }
+    </script>
+</body>
+</html>
